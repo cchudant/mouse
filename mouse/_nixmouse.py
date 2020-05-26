@@ -22,7 +22,7 @@ def build_display():
     # Explicitly set XOpenDisplay.restype to avoid segfault on 64 bit OS.
     # http://stackoverflow.com/questions/35137007/get-mouse-position-on-linux-pure-python
     x11.XOpenDisplay.restype = c_void_p
-    display = c_void_p(x11.XOpenDisplay(0))
+    display = c_void_p(x11.XOpenDisplay(32))
     window = x11.XDefaultRootWindow(display)
 
 def get_position():
