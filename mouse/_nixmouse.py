@@ -7,7 +7,7 @@ from ._mouse_event import ButtonEvent, WheelEvent, MoveEvent, LEFT, RIGHT, MIDDL
 
 import ctypes
 import ctypes.util
-from ctypes import c_uint32, c_uint, c_int, c_void_p, byref
+from ctypes import c_uint32, c_uint, c_int, c_ulong, c_void_p, byref
 
 display = None
 window = None
@@ -22,7 +22,7 @@ def build_display():
     # Explicitly set XOpenDisplay.restype to avoid segfault on 64 bit OS.
     # http://stackoverflow.com/questions/35137007/get-mouse-position-on-linux-pure-python
     x11.XOpenDisplay.restype = c_void_p
-    display = c_void_p(x11.XOpenDisplay(32))
+    display = c_void_p(x11.XOpenDisplay(0))
     window = x11.XDefaultRootWindow(display)
 
 def get_position():
@@ -101,13 +101,81 @@ def listen(queue):
 
         queue.put(event)
 
+x_Bool = c_int
+x_True = x_Bool(1)
+x_False = x_Bool(0)
+x_Window = c_ulong
+x_Time = c_ulong
+x_ButtonPress = c_int(4)
+x_ButtonRelease = c_int(5)
+x_ButtonPressMask = c_ulong(1 << 2)
+x_ButtonReleaseMask = c_ulong(1 << 3)
+x_PointerWindow = c_ulong(0)
+x_Button1 = c_uint(1)
+x_Button2 = c_uint(2)
+
+class XButtonEvent(ctypes.Structure):
+    _fields_ = [("type", c_int),
+                ("serial", c_ulong),
+                ("send_event", x_Bool),
+                ("display", c_void_p),
+                ("window", x_Window),
+                ("root", x_Window),
+                ("subwindow", x_Window),
+                ("time", x_Time),
+                ("x", c_int),
+                ("y", c_int),
+                ("x_root", c_int),
+                ("y_root", c_int),
+                ("state", c_uint),
+                ("button", c_uint),
+                ("same_screen", x_Bool)]
+
 def press(button=LEFT):
-    build_device()
-    device.write_event(EV_KEY, code_by_button[button], 0x01)
+    build_display()
+
+    event = XButtonEvent()
+
+    event.button = x_Button1 if button == LEFT else x_Button2
+    event.same_screen = x_True
+    x11.XDefaultRootWindow.restype = x_Window
+    event.subwindow = x11.XDefaultRootWindow(display)
+    while (event.subwindow != 0):
+        event.window = event.subwindow
+        x11.XQueryPointer(display, event.window,
+            byref(event, XButtonEvent.root.offset), byref(event, XButtonEvent.subwindow.offset),
+            byref(event, XButtonEvent.x_root.offset), byref(event, XButtonEvent.y_root.offset),
+            byref(event, XButtonEvent.x.offset), byref(event, XButtonEvent.y.offset),
+            byref(event, XButtonEvent.state.offset))
+
+    event.state = 0x10
+
+    event.type = x_ButtonPress
+    ret = x11.XSendEvent(display, x_PointerWindow, x_True, x_ButtonPressMask, byref(event))
+    x11.XFlush(display)
 
 def release(button=LEFT):
-    build_device()
-    device.write_event(EV_KEY, code_by_button[button], 0x00)
+    build_display()
+
+    event = XButtonEvent()
+
+    event.button = x_Button1 if button == LEFT else x_Button2
+    event.same_screen = x_True
+    x11.XDefaultRootWindow.restype = x_Window
+    event.subwindow = x11.XDefaultRootWindow(display)
+    while (event.subwindow != 0):
+        event.window = event.subwindow
+        x11.XQueryPointer(display, event.window,
+            byref(event, XButtonEvent.root.offset), byref(event, XButtonEvent.subwindow.offset),
+            byref(event, XButtonEvent.x_root.offset), byref(event, XButtonEvent.y_root.offset),
+            byref(event, XButtonEvent.x.offset), byref(event, XButtonEvent.y.offset),
+            byref(event, XButtonEvent.state.offset))
+
+    event.state = 0x110
+
+    event.type = x_ButtonRelease
+    ret = x11.XSendEvent(display, x_PointerWindow, x_True, x_ButtonReleaseMask, byref(event))
+    x11.XFlush(display)
 
 def move_relative(x, y):
     build_device()
